@@ -1,0 +1,14 @@
+{
+  "name": "leaflet-tilelayer-counting",
+  "homepage": "https://github.com/jblarsen/leaflet-tilelayer-counting",
+  "_release": "d64342a54a",
+  "_resolution": {
+    "type": "branch",
+    "branch": "master",
+    "commit": "d64342a54a3fe7b4b70cbc2f9cce85cba4bb90fc"
+  },
+  "_source": "https://github.com/jblarsen/leaflet-tilelayer-counting.git",
+  "_target": "*",
+  "_originalSource": "https://github.com/jblarsen/leaflet-tilelayer-counting.git",
+  "_direct": true
+}

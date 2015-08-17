@@ -1,0 +1,13 @@
+{
+  "name": "leaflet-control-legend",
+  "homepage": "https://github.com/jblarsen/leaflet-control-legend",
+  "_release": "d6543c8819",
+  "_resolution": {
+    "type": "branch",
+    "branch": "master",
+    "commit": "d6543c8819e0ae7415900d17f6638724f1e6e137"
+  },
+  "_source": "https://github.com/jblarsen/leaflet-control-legend.git",
+  "_target": "*",
+  "_originalSource": "https://github.com/jblarsen/leaflet-control-legend.git"
+}

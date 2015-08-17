@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Leaflet tile layers for FCOO METOC forecasts</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.css" />
+    <link rel="stylesheet" href="bower_components/leaflet-control-legend/leaflet-control-legend.css" />
+    <link rel="stylesheet" type="text/css" href="bower_components/jquery-ui/themes/ui-lightness/theme.css" />
+    <link rel="stylesheet" type="text/css" href="bower_components/jquery-ui/themes/ui-lightness/jquery-ui.css" />
+    <link rel="stylesheet" href="leaflet-tilelayer-impact.css" />
+</head>
+<body>
+    <div id="map" style="width: 800px; height: 600px"></div>
+    <script src="https://raw.githubusercontent.com/jblarsen/Leaflet/master/dist/leaflet-src.js"></script>
+    <script src="https://code.jquery.com/jquery-2.1.1.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.9.0/moment-with-locales.min.js"></script>
+    <script type="text/javascript" src="bower_components/jquery-ui/jquery-ui.js" charset="UTF-8"></script>
+    <script type="text/javascript" src="bower_components/noty/js/noty/packaged/jquery.noty.packaged.min.js" charset="UTF-8"></script>
+    <script type="text/javascript" src="bower_components/leaflet-control-legend/leaflet-control-legend.js" charset="UTF-8"></script>
+    <script type="text/javascript" src="bower_components/leaflet-tilelayer-counting/leaflet-tilelayer-counting.js" charset="UTF-8"></script>
+    <script type="text/javascript" src="bower_components/Leaflet.Terminator/L.Terminator.js" charset="UTF-8"></script>
+    <script type="text/javascript" src="bower_components/leaflet-tilelayer-wms-fcoo/leaflet-tilelayer-wms-fcoo.js" charset="UTF-8"></script>
+    <script type="text/javascript" src="bower_components/leaflet-tilelayer-wms-fcoo/leaflet-tilelayer-wms-model.js" charset="UTF-8"></script>
+    <script type="text/javascript" src="leaflet-tilelayer-impact.js" charset="UTF-8"></script>
+    <script type="text/javascript" src="leaflet-tilelayer-impact-store.js" charset="UTF-8"></script>
+    <script>
+        var map = L.map('map').setView([56.5, 12.0], 5);
+        L.tileLayer('http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 18,
+            attribution: '&copy; <a href="http://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors</a>'
+        }).addTo(map);
+
+        var store = new L.Control.ImpactLayerStore;
+        //console.log(store.listLayers());
+        var options = {
+            'dataset': 'ECMWF/DXD_DXP/DENMARK',
+            'parameter': 'helo'
+        }
+        var heloImpact = store.getLayer(options);
+        map.addLayer(heloImpact);
+    </script>
+</body>
+</html>

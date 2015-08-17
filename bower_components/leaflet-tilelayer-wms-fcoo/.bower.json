@@ -1,0 +1,37 @@
+{
+  "name": "leaflet-tilelayer-wms-fcoo",
+  "main": "leaflet-tilelayer-wms-fcoo.js",
+  "homepage": "https://github.com/jblarsen/leaflet-tilelayer-wms-fcoo",
+  "authors": [
+    "Jesper Baasch-Larsen <jla@fcoo.dk>"
+  ],
+  "description": "WMS tile layers for FCOO METOC forecasts",
+  "moduleType": [
+    "es6"
+  ],
+  "license": "MIT",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "leaflet-control-legend": "https://github.com/jblarsen/leaflet-control-legend.git",
+    "noty": "~2.3.4",
+    "leaflet-tilelayer-counting": "https://github.com/jblarsen/leaflet-tilelayer-counting.git",
+    "Leaflet.Terminator": "https://github.com/jblarsen/Leaflet.Terminator.git",
+    "Leaflet": "https://github.com/jblarsen/Leaflet.git#master"
+  },
+  "_release": "3628e9464a",
+  "_resolution": {
+    "type": "branch",
+    "branch": "master",
+    "commit": "3628e9464a046a148a79d7844f5248c0181f821d"
+  },
+  "_source": "https://github.com/jblarsen/leaflet-tilelayer-wms-fcoo.git",
+  "_target": "*",
+  "_originalSource": "https://github.com/jblarsen/leaflet-tilelayer-wms-fcoo.git",
+  "_direct": true
+}
