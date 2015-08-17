@@ -176,6 +176,9 @@ L.Control.Impact.LegendParameter = L.Control.extend({
     },
 
     _redrawLegendParameter: function(container, containerName) {
+        var myParam = this; // Used in closure below
+        var myMap = this._map; // Used in closure below
+
         // Initialize slider text
         var opr1,
             opr2;
@@ -202,6 +205,7 @@ L.Control.Impact.LegendParameter = L.Control.extend({
                              '" class="fcoo-legend-slider-enabled">');
         slider_check.attr('checked', this.options.enabled);
         $(slider_info).append(slider_check);
+
         slider_info.innerHTML += lname + ": ";
         var $slider_info_green = $('<span id="fcoo-legend-slider-info-green-' +
                               containerName + '_' + sname + 
@@ -219,8 +223,6 @@ L.Control.Impact.LegendParameter = L.Control.extend({
         var slider_green = $('<div class="slider-green"></div>');
         $slider_info_green.html(opr1 + ' ' + Math.abs(values[0]) + " " + units);
         $slider_info_red.html(opr2 + ' ' + Math.abs(values[1]) + " " + units);
-        var myParam = this; // Used in closure below
-        var myMap = this._map; // Used in closure below
 
         var baseoptions = {
             /*jshint unused: true*/
@@ -257,10 +259,11 @@ L.Control.Impact.LegendParameter = L.Control.extend({
         $(container).append(slider_container);
 
         // Make it possible to enable/disable parameter
-        $('#fcoo-legend-slider-enabled-' + containerName + '_' + sname).on("click", function () {
+        $('body').on('click', '#fcoo-legend-slider-enabled-' + containerName + '_' + sname, function () {
             myParam.options.enabled = !myParam.options.enabled;
             myMap.fire('legendupdate');
         });
+
     }
 
 });
