@@ -94,6 +94,10 @@ L.Control.CategorizedLayers.include({
                                 for (var k in mysettings) {
                                     enabled = (mysettings[k].enabled === "true");
                                     values =  $.map(mysettings[k].values, parseFloat);
+                                    // Check if layer has been put on map; otherwise put it on
+                                    if (obj._map === null) {
+                                        this._map.addLayer(obj);
+                                    }
                                     var mylegends = obj._legendControl._legendContainer;
                                     for (var ii in mylegends) {
                                         if (mylegends[ii].options.layer === obj) {
