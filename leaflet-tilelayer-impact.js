@@ -198,27 +198,28 @@ L.Control.Impact.LegendParameter = L.Control.extend({
         // Add slider for selecting parameters
         var slider_container = L.DomUtil.create('div', 'fcoo-legend-slider');
         var slider_info = L.DomUtil.create('p', 'fcoo-legend-slider-info', slider_container);
+        var containerNameSafe = containerName.replace(/ /g, '_');
         var slider_check = $('<input type="checkbox" id="fcoo-legend-slider-enabled-' +
-                             containerName + '_' + sname + 
+                             containerNameSafe + '_' + sname + 
                              '" name="fcoo-legend-slider-enabled-' +
-                             containerName + '_' + sname + 
+                             containerNameSafe + '_' + sname + 
                              '" class="fcoo-legend-slider-enabled">');
         slider_check.attr('checked', this.options.enabled);
         $(slider_info).append(slider_check);
 
         slider_info.innerHTML += lname + ": ";
         var $slider_info_green = $('<span id="fcoo-legend-slider-info-green-' +
-                              containerName + '_' + sname + 
+                              containerNameSafe + '_' + sname + 
                               '" class="fcoo-legend-slider-info-green"></span>');
         var $slider_info_red = $('<span id="fcoo-legend-slider-info-red-' +
-                              containerName + '_' + sname +
+                              containerNameSafe + '_' + sname +
                               '" class="fcoo-legend-slider-info-red"></span>');
         $(slider_info).append($slider_info_green);
         $(slider_info).append($slider_info_red);
         var slider_div = $(L.DomUtil.create('div', 
             'fcoo-legend-slider-div ui-slider-handle leaflet-control', slider_container));
         slider_div.attr("id", "fcoo-legend-slider-div-" + 
-                        containerName + "_" + sname);
+                        containerNameSafe + "_" + sname);
    
         var slider_green = $('<div class="slider-green"></div>');
         $slider_info_green.html(opr1 + ' ' + Math.abs(values[0]) + " " + units);
@@ -259,7 +260,7 @@ L.Control.Impact.LegendParameter = L.Control.extend({
         $(container).append(slider_container);
 
         // Make it possible to enable/disable parameter
-        $('body').on('click', '#fcoo-legend-slider-enabled-' + containerName + '_' + sname, function () {
+        $('body').on('click', '#fcoo-legend-slider-enabled-' + containerNameSafe + '_' + sname, function () {
             myParam.options.enabled = !myParam.options.enabled;
             myMap.fire('legendupdate');
         });
