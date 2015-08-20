@@ -356,9 +356,8 @@ L.Control.Impact.LegendLayer = L.Control.extend({
         }
 
         if (attribution !== null) {
-            L.DomUtil.create('br', '', item);
             var attrelem = L.DomUtil.create('div', '', item);
-            attrelem.innerHTML = attribution;
+            attrelem.innerHTML = '<br/><p>' + attribution + '</p>';
         }
         $(this._container).append(item);
   
