@@ -46,7 +46,7 @@ L.Control.Impact = L.Control.extend({
 
     initialize: function(options) {
         L.Util.setOptions(this, options);
-        this._container = L.DomUtil.create('div', 'fcoo-legend-container');
+        this._container = L.DomUtil.create('div', 'fcoo-impact-legend-container');
         //this._container.style.display = 'none';
         this._legendCounter = 0;
         this._legendContainer = [];
@@ -196,29 +196,31 @@ L.Control.Impact.LegendParameter = L.Control.extend({
         }
 
         // Add slider for selecting parameters
-        var slider_container = L.DomUtil.create('div', 'fcoo-legend-slider');
-        var slider_info = L.DomUtil.create('p', 'fcoo-legend-slider-info', slider_container);
+        var slider_container = L.DomUtil.create('div', 'fcoo-impact-legend-slider');
         var containerNameSafe = containerName.replace(/ /g, '_');
-        var slider_check = $('<input type="checkbox" id="fcoo-legend-slider-enabled-' +
+        var slider_info = $('<label class="fcoo-impact-legend-slider-info" />');
+        slider_info.prop('for', 'fcoo-impact-legend-slider-enabled-' + containerNameSafe + '_' + sname);
+        $(slider_container).append(slider_info);
+        var slider_check = $('<input type="checkbox" id="fcoo-impact-legend-slider-enabled-' +
                              containerNameSafe + '_' + sname + 
-                             '" name="fcoo-legend-slider-enabled-' +
+                             '" name="fcoo-impact-legend-slider-enabled-' +
                              containerNameSafe + '_' + sname + 
-                             '" class="fcoo-legend-slider-enabled">');
+                             '" class="fcoo-impact-legend-slider-enabled">');
         slider_check.attr('checked', this.options.enabled);
-        $(slider_info).append(slider_check);
+        $(slider_container).append(slider_check);
 
-        slider_info.innerHTML += lname + ": ";
-        var $slider_info_green = $('<span id="fcoo-legend-slider-info-green-' +
+        slider_info.html(slider_info.html() + lname + ":&nbsp;");
+        var $slider_info_green = $('<span id="fcoo-impact-legend-slider-info-green-' +
                               containerNameSafe + '_' + sname + 
-                              '" class="fcoo-legend-slider-info-green"></span>');
-        var $slider_info_red = $('<span id="fcoo-legend-slider-info-red-' +
+                              '" class="fcoo-impact-legend-slider-info-green"></span>');
+        var $slider_info_red = $('<span id="fcoo-impact-legend-slider-info-red-' +
                               containerNameSafe + '_' + sname +
-                              '" class="fcoo-legend-slider-info-red"></span>');
-        $(slider_info).append($slider_info_green);
-        $(slider_info).append($slider_info_red);
+                              '" class="fcoo-impact-legend-slider-info-red"></span>');
+        slider_info.append($slider_info_green);
+        slider_info.append($slider_info_red);
         var slider_div = $(L.DomUtil.create('div', 
-            'fcoo-legend-slider-div ui-slider-handle leaflet-control', slider_container));
-        slider_div.attr("id", "fcoo-legend-slider-div-" + 
+            'fcoo-impact-legend-slider-div ui-slider-handle leaflet-control', slider_container));
+        slider_div.attr("id", "fcoo-impact-legend-slider-div-" + 
                         containerNameSafe + "_" + sname);
    
         var slider_green = $('<div class="slider-green"></div>');
@@ -260,7 +262,7 @@ L.Control.Impact.LegendParameter = L.Control.extend({
         $(container).append(slider_container);
 
         // Make it possible to enable/disable parameter
-        $('body').on('click', '#fcoo-legend-slider-enabled-' + containerNameSafe + '_' + sname, function () {
+        $('body').on('click', '#fcoo-impact-legend-slider-enabled-' + containerNameSafe + '_' + sname, function () {
             myParam.options.enabled = !myParam.options.enabled;
             myMap.fire('legendupdate');
         });
@@ -339,14 +341,9 @@ L.Control.Impact.LegendLayer = L.Control.extend({
         var isLeft = this.options.position.indexOf('left') !== -1;
         var cssFloat = isLeft ? 'left' : 'right';
         var attribution = this.options.attribution;
-        var item = L.DomUtil.create('div', 'fcoo-legend-item leaflet-control');
+        var item = L.DomUtil.create('div', 'fcoo-impact-legend-item leaflet-control');
         item.style.cssFloat = cssFloat;
-        if (isLeft) {
-            item.style.marginRight = '10px';
-        } else {
-            item.style.marginLeft = '10px';
-        }
-        var title = L.DomUtil.create('p', 'fcoo-legend-item-title', item);
+        var title = L.DomUtil.create('p', 'fcoo-impact-legend-item-title', item);
         var name = this.options.name;
         title.innerHTML = name;
 
