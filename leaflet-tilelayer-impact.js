@@ -12,8 +12,15 @@ L.TileLayer.WMS.Impact = L.TileLayer.WMS.Fcoo.extend({
     baseUrl: location.protocol + "//{s}.fcoo.dk/webmap/impact/{dataset}.wms",
 
     onAdd: function(map) {
+        var that = this;
         L.TileLayer.WMS.prototype.onAdd.call(this, map);
         this._map = map;
+
+        // Subscribe to datetime updates
+        map.on('datetimechange', function(evt) {
+            that.setParams({time: evt.datetime}, false, true);
+        });
+
         // Create or get LegendControl if it already exists
         this._legendControl = this._getLegendControl();
         // Add this layer legend to the LegendControl
