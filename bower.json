@@ -22,7 +22,7 @@
     "leaflet-control-legend": "https://github.com/jblarsen/leaflet-control-legend.git",
     "noty": "~2.3.4",
     "leaflet-tilelayer-counting": "https://github.com/jblarsen/leaflet-tilelayer-counting.git",
-    "Leaflet": "https://github.com/jblarsen/Leaflet.git#master",
+    "Leaflet": "https://github.com/jblarsen/Leaflet.git#master-dist",
     "leaflet-tilelayer-wms-fcoo": "https://github.com/jblarsen/leaflet-tilelayer-wms-fcoo.git",
     "jquery-ui": "~1.11.4"
   }
