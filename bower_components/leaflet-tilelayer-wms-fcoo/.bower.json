@@ -22,16 +22,20 @@
     "noty": "~2.3.4",
     "leaflet-tilelayer-counting": "https://github.com/jblarsen/leaflet-tilelayer-counting.git",
     "Leaflet.Terminator": "https://github.com/jblarsen/Leaflet.Terminator.git",
-    "Leaflet": "https://github.com/jblarsen/Leaflet.git#master"
+    "Leaflet": "https://github.com/jblarsen/Leaflet.git#master-dist",
+    "leaflet-control-vertical": "https://github.com/jblarsen/leaflet-control-vertical.git",
+    "leaflet-tilelayer-wms-pydap": "https://github.com/jblarsen/leaflet-tilelayer-wms-pydap.git"
   },
-  "_release": "3628e9464a",
+  "resolutions": {
+    "leaflet": "master-dist"
+  },
+  "_release": "cb33a852e0",
   "_resolution": {
     "type": "branch",
     "branch": "master",
-    "commit": "3628e9464a046a148a79d7844f5248c0181f821d"
+    "commit": "cb33a852e0b007b6aca046250938b0a2697c63cd"
   },
   "_source": "https://github.com/jblarsen/leaflet-tilelayer-wms-fcoo.git",
   "_target": "*",
-  "_originalSource": "https://github.com/jblarsen/leaflet-tilelayer-wms-fcoo.git",
-  "_direct": true
+  "_originalSource": "https://github.com/jblarsen/leaflet-tilelayer-wms-fcoo.git"
 }

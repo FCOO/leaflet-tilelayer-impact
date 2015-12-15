@@ -25,5 +25,8 @@
     "Leaflet": "https://github.com/jblarsen/Leaflet.git#master-dist",
     "leaflet-tilelayer-wms-fcoo": "https://github.com/jblarsen/leaflet-tilelayer-wms-fcoo.git",
     "jquery-ui": "~1.11.4"
+  },
+  "resolutions": {
+    "leaflet": "master-dist"
   }
 }

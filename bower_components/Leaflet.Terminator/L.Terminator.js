@@ -34,6 +34,20 @@ L.Terminator = L.Polygon.extend({
 	this.setLatLngs(latLng);
     },
 
+    onAdd: function(map) {
+        L.Polygon.prototype.onAdd.call(this, map);
+        var that = this;
+        // Subscribe to datetime updates
+        map.on('datetimechange', function(evt) {
+            var datetime = evt.datetime.split('T');
+            var date = datetime[0].split('-');
+            var time = datetime[1].split(':');
+            datetime = new Date(Date.UTC(parseInt(date[0]), parseInt(date[1])-1, parseInt(date[2]),
+                       parseInt(time[0]), parseInt(time[1]), parseInt(time[2].replace('Z',''))));
+            that.setTime(datetime);
+        });
+    },
+
     setTime: function(date) {
         this.options.time = date;
         var latLng = this._compute(date || null)

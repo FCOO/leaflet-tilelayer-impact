@@ -4,12 +4,12 @@
     <title>Leaflet control for zooming to a specified position</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="https://raw.githubusercontent.com/jblarsen/Leaflet/master/dist/leaflet.css" />
+    <link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.css" />
 </head>
 <body>
     <div id="map" style="width: 600px; height: 400px"></div>
     <div id="info"></div>
-    <script src="https://raw.githubusercontent.com/jblarsen/Leaflet/master/dist/leaflet-src.js"></script>
+    <script src="bower_components/Leaflet/dist/leaflet-src.js"></script>
     <script src="https://code.jquery.com/jquery-2.1.1.js"></script>
     <script type="text/javascript" src="leaflet-tilelayer-counting.js" charset="UTF-8"></script>
     <script>
@@ -19,14 +19,16 @@
             attribution: '&copy; <a href="http://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors</a>'
         });
         var $info_elem = $('#info');
-        for (var i = 0; i < 5; i++) {
+        for (var i = 0; i < 3; i++) {
             layer.addTo(map);
             $info_elem.append("Added layer, count is now = " + layer._counter + "<br />");
         }
-        for (var i = 0; i < 5; i++) {
+        for (var i = 0; i < 3; i++) {
             layer.removeFrom(map);
             $info_elem.append("Removed layer, count is now = " + layer._counter + "<br />");
         }
+        layer.addTo(map);
+        $info_elem.append("Added layer, count is now = " + layer._counter + "<br />");
     </script>
 </body>
 </html>

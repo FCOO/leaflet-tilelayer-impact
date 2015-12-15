@@ -1,403 +1,1760 @@
-(function (){
+(function () {
     "use strict";
     /*jslint browser: true*/
     /*global $, L, console*/
 
-    /**
-     * A JavaScript library for using Danish Defence Center for Operational Oceanography's (FCOO)
-     * Web Map Service layers without hassle.
+    /*
+     * Store containing various layers hosted by FCOO
      */
-    function mediaQueriesSupported() {
-            return (window.matchMedia !== undefined || window.msMatchMedia !== undefined);
-    }
+    L.Control.FcooLayerStore = L.Control.extend({
 
-    L.TileLayer.WMS.Fcoo = L.TileLayer.WMS.extend({
-        //baseUrl: location.protocol + "//{s}.fcoo.dk/webmap-staging/{dataset}.wms",
-        baseUrl: location.protocol + "//{s}.fcoo.dk/webmap/{dataset}.wms",
-        //baseUrl: "http://webmap-dev01:8080/{dataset}.wms",
-        defaultWmsParams: {
-            service: 'WMS',
-            request: 'GetMap',
-            version: '1.1.1',
-            layers: '',
-            styles: '',
-            format: 'image/png',
-            transparent: true,
-        },
-        defaultLegendParams: {
-            request: 'GetColorbar',
-            styles: 'horizontal,nolabel',
-            cmap: '',
-            show: false,
-            imageUrl: null,
-            position: 'bottomleft',
-            attribution: null,
-        },
         options: {
             language: 'en',
-            bounds: null,
-            tileSize: 512,
-            opacity: 1.00,
-            updateInterval: 50,
-            subdomains: ['api01', 'api02', 'api03', 'api04'],
-            maxZoom: 18,
-            primadonna: true,
-            foreground: null,
-            crs: L.CRS.EPSG3857,
-            attribution: 'Weather from <a href="http://fcoo.dk/" alt="Danish Defence METOC Forecast Service">FCOO</a>'
         },
 
-        initialize: function (dataset, wmsParams, legendParams, options) {
-            this._basetileurl = this.baseUrl.replace('{dataset}', dataset);
-            this._map = null;
-            this._legendControl = null;
-            this._legendId = null;
-            this._dataset = dataset;
-            this.timesteps = null;
-            L.TileLayer.WMS.prototype.initialize.call(this, this._basetileurl, wmsParams);
-            //$.extend(this.options, options);
+        initialize: function (options) {
+            this._subdomains = ["tiles01", "tiles02", "tiles03", "tiles04"];
+            this._fcoo_base = location.protocol + "//{s}.fcoo.dk/tiles/";
+            this._tileSize = 512;
             L.Util.setOptions(this, options);
-            if (legendParams !== undefined && legendParams.show !== false) {
-                legendParams.show = true;
-                if (legendParams.cmap === undefined) {
-                    legendParams.cmap = this.wmsParams.cmap;
-                }
-                var mobile = false;
-                if (mediaQueriesSupported()) {
-                    var mq = window.matchMedia('screen and (max-width: 640px), screen and (max-height: 640px)');
-                    mobile = mq.matches;
-                }
-                if (mobile) {
-                    legendParams.position = 'topleft';
-                }
-            }
-            this.legendParams = {};
-            $.extend(this.legendParams, this.defaultLegendParams, legendParams);
-            jQuery.support.cors = true;
-            // We just select a subdomain to request capabilities from
-            // based on the dataset name and layer names. This is simply
-            // done to distribute the requests somewhat between the
-            // subdomains.
-            if (options.hasOwnProperty('ajaxProxy')) {
-                var subindex = dataset.length;
-            } else {
-                var subindex = dataset.length + this.wmsParams.layers.length;
-            }
-            subindex = subindex % this.options.subdomains.length;
 
-            this._fcootileurl = L.Util.template(this._basetileurl, 
-                           {s: this.options.subdomains[subindex]});
-
-            // Request layer information from server
-            var ajaxOptions = {
-              url: this._fcootileurl,
-              data: {
-                      SERVICE: 'WMS',
-                      REQUEST: 'GetMetadata',
-                      VERSION: this.wmsParams.version,
-                      ITEMS: 'epoch,last_modified,long_name,units,bounds,time',
-                      LAYERS: this.wmsParams.layers.split(':')[0].split(',')[0],
-                    },
-              context: this,
-              error: this._error_metadata,
-              success: this._got_metadata,
-              beforeSend: function(jqXHR, settings) {
-                  jqXHR.url = settings.url;
-              },
-              cache: true,
-              dataType: "json",
-              async: true
-            };
-            // If ajaxProxy is provided through options we delegate the
-            // ajax call to the provided function. Otherwise we use a
-            // jQuery ajax call
-            if (options.hasOwnProperty('ajaxProxy')) {
-                options.ajaxProxy.deferredAjax(ajaxOptions);
-            } else {
-                $.ajax(ajaxOptions);
-            }
+            // List of layers
+            this.layers = this.listLayers();
         },
 
-        setParams: function (params, noRedraw, animate) {
-            L.extend(this.wmsParams, params);
-            if (!noRedraw) {
-                this._abortLoading();
-                if (this._map) {
-                    this.redraw(animate);
-                }
-            }
-            return this;
-        },
-
-        // We override the redraw function to not remove current tiles
-        // to avoid blinking when setParams is called.
-        redraw: function (animate) {
-            if (this._map) {
-                if (!animate) {
-                    this._removeAllTiles();
-                }
-                this._update();
-            }
-            return this;
-        },
-
-        // Converts tile coordinates to key for the tile cache. We override
-        // this to include a time stamp as well.
-        _tileCoordsToKey: function (coords) {
-            return coords.x + ':' + coords.y + ':' + coords.z + ':' + this.wmsParams.time;
-        },
-
-        // TODO: Not yet functional
-        prefetch: function (params, callback) {
-            /* Fetches a layer which is identical to this layer except
-             * what options the input params override. And the zIndex
-             * is set to a very small value. 
-             * NOTE: Could use opacity to hide layer instead
-             */
-            // Temporarily disabled
-            return;
-
-            /*
-            var myWmsParams = $.extend({}, this.wmsParams, params);
-            var myLegendParams = {show: false};
-            if (! this._cacheLayer) {
-                var myOptions = $.extend({}, this.options, {'zIndex': -2147483646});
-                this._cacheLayer = new L.TileLayer.WMS.Fcoo(this._dataset, myWmsParams, myLegendParams, myOptions);
-                var map = this._map; // Closure
-                this._cacheLayer.on('load', function(e) {
-                    // First remove layer, then execute provided callback
-                    //map.removeLayer(this._cacheLayer);
-                    if (callback !== undefined) {
-                        callback();
-                    }
+        getForeground: function () {
+            // Foreground layer (colored land and transparent sea)
+            if (this._foreground == undefined) {
+                this._foreground = new L.TileLayer.Counting(this._fcoo_base + "tiles_frgrnd_" + this._tileSize + "_mercator_201508030000/{z}/{x}/{y}.png", {
+                    maxZoom: 12,
+                    tileSize: this._tileSize,
+                    subdomains: this._subdomains,
+                    zIndex: 800,
+                    attribution: '<a href="' + location.protocol + '//fcoo.dk">Danish Defence Centre for Operational Oceanography</a>',
+                    continuousWorld: false,
+                    updateInterval: 50,
+                    errorTileUrl: this._fcoo_base + "empty_" + this._tileSize + ".png"
                 });
-                map.addLayer(this._cacheLayer);
-            } else {
-                this._cacheLayer.setParams(params, false, false);
             }
-            */
+            return this._foreground;
         },
 
-        // TODO: Not yet functional
-        prefetchAll: function () {
-            /* Fetches layers corresponding to all timesteps in this
-             * layer starting from the current timestep.
-             */
-            var timesteps = this.timesteps;
+        getBackground: function () {
+            // Background layer (colored land and sea)
+            var background = L.tileLayer(this._fcoo_base + "tiles_bckgrnd_" + this._tileSize + "_mercator_201508030000/{z}/{x}/{y}.png", {
+                maxZoom: 12,
+                tileSize: this._tileSize,
+                subdomains: this._subdomains,
+                attribution: '<a href="' + location.protocol + '//fcoo.dk">Danish Defence Centre for Operational Oceanography</a>',
+                continuousWorld: false,
+                updateInterval: 50
+            });
+            return background;
+        },
 
-            var _startTime = function (currentTime, timesteps) {
-                /* Find current timestep - otherwise start from first */
-                var time = moment(currentTime);
-                var timestep = 0;
-                if (time !== undefined) {
-                    for (var i in timesteps) {
-                        if (time.isSame(moment(timesteps[i]))) {
-                            timestep = i+1;
-                            if (timestep > timesteps.length-1) {
-                                timestep = 0;
+        getTopLayer: function () {
+            // Top layer (coastline + place names)
+            var topLayer = L.tileLayer(this._fcoo_base + "tiles_top_" + this._tileSize + "_mercator_201508310000/{z}/{x}/{y}.png", {
+                maxZoom: 12,
+                tileSize: this._tileSize,
+                subdomains: this._subdomains,
+                zIndex: 1000,
+                continuousWorld: false,
+                updateInterval: 50,
+                errorTileUrl: this._fcoo_base + "empty_" + this._tileSize + ".png"
+            });
+            return topLayer;
+        },
+
+        getEEZ: function () {
+            // Exclusive Economic Zone layer
+            var EEZ = new L.tileLayer(this._fcoo_base + "tiles_EEZ_" + this._tileSize + "_mercator_201504270000" + "/{z}/{x}/{y}.png", {
+                maxZoom: 12,
+                tileSize: this._tileSize,
+                subdomains: this._subdomains,
+                zIndex: 875,
+                attribution: '<a href="' + location.protocol + '//fcoo.dk">Danish Defence Centre for Operational Oceanography</a>',
+                continuousWorld: false,
+                updateInterval: 50,
+                errorTileUrl: this._fcoo_base + "empty_" + this._tileSize + ".png"
+            });
+            return EEZ;
+        },
+
+        getSAR: function () {
+            // Search and Rescue layer (Greenland only)
+            var SAR = new L.tileLayer(this._fcoo_base + "tiles_SAR_" + this._tileSize + "_mercator_201504270000" + "/{z}/{x}/{y}.png", {
+                maxZoom: 12,
+                tileSize: this._tileSize,
+                subdomains: this._subdomains,
+                zIndex: 875,
+                attribution: '<a href="' + location.protocol + '//fcoo.dk">Danish Defence Centre for Operational Oceanography</a>',
+                continuousWorld: false,
+                updateInterval: 50,
+                errorTileUrl: this._fcoo_base + "empty_" + this._tileSize + ".png"
+            });
+            return SAR;
+        },
+
+        getSolarTerminator: function () {
+            // Solar Terminator layer
+            return new L.Terminator();
+        },
+
+        getFiringAreas: function () {
+            // Firing areas (Denmark only)
+            var firingAreas = new L.tileLayer(this._fcoo_base + "tiles_skyde_" + this._tileSize + "_mercator_201508030000" + "/{z}/{x}/{y}.png", {
+                minZoom: 7,
+                maxZoom: 12,
+                tileSize: this._tileSize,
+                subdomains: this._subdomains,
+                zIndex: 875,
+                attribution: '<a href="' + location.protocol + '//fcoo.dk">Danish Defence Centre for Operational Oceanography</a>',
+                continuousWorld: false,
+                updateInterval: 50,
+                errorTileUrl: this._fcoo_base + "empty_" + this._tileSize + ".png"
+            });
+            return firingAreas;
+        },
+
+        listLayers: function () {
+            var datasets = [],
+                blacklist = ["dataset", "wmsParams", "legendParams", "options"],
+                i,
+                j,
+                k,
+                m,
+                provider,
+                model,
+                setup;
+            for (i in this.model) {
+                if (this.model.hasOwnProperty(i) && $.inArray(i, blacklist) === -1) {
+                    provider = this.model[i];
+                    for (j in provider) {
+                        if (provider.hasOwnProperty(j) && $.inArray(j, blacklist) === -1) {
+                            model = provider[j];
+                            for (k in model) {
+                                if (model.hasOwnProperty(k) && $.inArray(k, blacklist) === -1) {
+                                    setup = model[k];
+                                    for (m in setup) {
+                                        if (setup.hasOwnProperty(m) && $.inArray(m, blacklist) === -1) {
+                                            datasets[datasets.length] = [i, j, k, m].join('/');
+                                        }
+                                    }
+                                }
                             }
-                            break;
                         }
                     }
                 }
-                return timestep;
-            };
-            var timestep = _startTime(this.wmsParams.time, this.timesteps);
-
-            var noRedraw = true;
-            var running = true;
-            var now = timesteps[timestep];
-            var that = this;
-            var callback = function () {
-                timestep += 1;
-                if (timestep > timesteps.length-1) {
-                    timestep = 0;
-                }
-                var strtime = moment(timesteps[timestep]);
-                strtime = strtime.format('YYYY-MM-DDTHH:mm:ss.SSS') + 'Z';
-                var params = {'time': strtime};
-                if (! time.isSame(moment(timesteps[i]))) {
-                    console.log(params);
-                    that.prefetch(params);
-                }
-            };
-            var strtime = moment(timesteps[timestep]);
-            strtime = strtime.format('YYYY-MM-DDTHH:mm:ss.SSS') + 'Z';
-            var params = {'time': strtime};
-            this.prefetch(params, callback);
-        },
-     
-        // TODO: Not yet functional
-        abortPrefetch: function () {
-            /* Abort prefetching. */
-            this._cacheLayer.on('load', function () {}, this);
-        },
-
-        /*
-         * Override getTileUrl when requesting data outside 
-         * time range. When outside we return a data url 
-         * containing a blank transparent image.
-         */
-        getTileUrl: function (coords) {
-            var url;
-            // Check if within time range
-            var load_tile = true;
-            function parseDecimalInt(s) {
-                    return parseInt(s, 10);
             }
-            var stime = this.wmsParams.time;
-            // wmsParams.time might not yet be initialized.
-            // In that case we just request the image even
-            // if it is out of time range
-            if (stime !== undefined) {
-                var sptime = stime.split('T');
-                if (sptime.length == 2) {
-                    var date = sptime[0].split('-').map(parseDecimalInt);
-                    var time = sptime[1].split(':').map(parseDecimalInt);
-                    var timestep = new Date(Date.UTC(date[0], date[1]-1, date[2],
-                                             time[0], time[1], time[2]));
-                    var timesteps = this.timesteps;
-                    if (timesteps !== null && (timestep < timesteps[0] ||
-                        timestep > timesteps[timesteps.length-1])) {
-                        load_tile = false;
+            return datasets;
+        },
+
+        filterParams: function (obj) {
+            var result = {},
+                key,
+                paramElems = ["dataset", "wmsParams", "legendParams", "options"];
+            for (key in obj) {
+                if (obj.hasOwnProperty(key) && $.inArray(key, paramElems) !== -1) {
+                    result[key] = obj[key];
+                }
+            }
+            return result;
+        },
+
+        filterLayers: function (obj) {
+            var result = {},
+                key,
+                paramElems = ["dataset", "wmsParams", "legendParams", "options"];
+            for (key in obj) {
+                if (obj.hasOwnProperty(key) && $.inArray(key, paramElems) === -1) {
+                    result[key] = obj[key];
+                }
+            }
+            return result;
+        },
+
+        getLayerOptions: function (options) {
+            var datastr = options.dataset + '/' + options.parameter,
+                dataset = options.dataset.split('/'),
+                provider = dataset[0],
+                model = dataset[1],
+                setup = dataset[2],
+                parameter = options.parameter,
+                wmsParams = {},
+                legendParams = {},
+                loptions = {},
+                node = this.model,
+                nodeParams = this.filterParams(node),
+                path = [provider, model, setup, parameter],
+                msg,
+                i,
+                edge,
+                output;
+            //dataset = null;
+            if ($.inArray(datastr, this.layers) === -1) {
+                msg = 'Cannot find layer corresponding to ' + datastr;
+                console.error(msg);
+                console.error('Available layers: ' + this.listLayers());
+                throw new Error(msg);
+            }
+            // Get all settings by traversing model
+            for (i in path) {
+                if (path.hasOwnProperty(i)) {
+                    edge = path[i];
+                    node = node[edge];
+                    nodeParams = this.filterParams(node);
+                    if (nodeParams.hasOwnProperty('dataset')) {
+                        dataset = nodeParams.dataset;
+                    }
+                    if (nodeParams.hasOwnProperty('wmsParams')) {
+                        $.extend(wmsParams, nodeParams.wmsParams);
+                    }
+                    if (nodeParams.hasOwnProperty('legendParams')) {
+                        $.extend(legendParams, nodeParams.legendParams);
+                    }
+                    if (nodeParams.hasOwnProperty('options')) {
+                        $.extend(loptions, nodeParams.options);
                     }
                 }
             }
-
-            if (load_tile) {
-                url = L.TileLayer.WMS.prototype.getTileUrl.call(this, coords);
-            } else {
-                url = "data:image/gif;base64,R0lGODlhAQABAID/AMDAwAAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==";
+            if (dataset === null) {
+                console.error('Dataset attribute not defined');
             }
-            return url;
-        },
-
-        _error_metadata: function(jqXHR, textStatus, err) {
-            var msg = 'Failed getting web map metadata from ' + jqXHR.url;
-            var n = noty({text: msg, type: "error"});
-            throw new Error(msg);
-        },
-
-        _got_metadata: function(json, textStatus, jqXHR) {
-            var last_modified;
-            try {
-                if ('epoch' in json) {
-                    last_modified = json.epoch;
-                } else {
-                    last_modified = json.last_modified;
-                }
-                this._last_modified = moment(last_modified);
-                var variable = json[this.wmsParams.layers.split(':')[0].split(',')[0]];
-                //console.log(variable);
-                this._long_name = variable.long_name;
-                this._units = variable.units;
-                // Extract bounds for this variable
-                if ('bounds' in variable) {
-                    var bounds = variable.bounds;
-                    bounds[0] = (bounds[0] > 180.0) ? bounds[0] - 360.0 : bounds[0];
-                    bounds[2] = (bounds[2] > 180.0) ? bounds[2] - 360.0 : bounds[2];
-                    this.options.bounds =  L.latLngBounds(
-                                             L.latLng(bounds[1], bounds[0]), 
-                                             L.latLng(bounds[3], bounds[2]));
-                }
-                if ('time' in variable) {
-                    // Make array of timesteps for this layer
-                    var parseDecimalInt = function (s) {
-                        return parseInt(s, 10);
-                    };
-                    var extent = variable.time;
-                    var timesteps = [];
-                    for (var i=0; i<extent.length; i++) {
-                        var dt = extent[i].split('T');
-                        var d = dt[0].split('-').map(parseDecimalInt);
-                        var t = dt[1].split(':').map(parseDecimalInt);
-                        var currentdate = new Date(Date.UTC(d[0], d[1]-1, d[2], t[0], t[1], t[2]));
-                        timesteps[i] = new Date(currentdate);
-                    }
-                    this.timesteps = timesteps;
-                }
-            } catch (err) {
-                //console.log(err);
-                var n = noty({text: err.message, type: "error"});
-                throw err;
+            // Exchange foreground attribute with real foreground layer
+            if (loptions.hasOwnProperty('foreground')) {
+                loptions.foreground = this.getForeground();
             }
-        },
-
-        getLegendUrl: function() {
-            var params = {
-                request: this.legendParams.request,
-                styles: this.legendParams.styles,
-                cmap: this.legendParams.cmap
+            // Override with supplied options
+            if (options.hasOwnProperty('wmsParams')) {
+                $.extend(wmsParams, options.wmsParams);
+            }
+            if (options.hasOwnProperty('legendParams')) {
+                $.extend(legendParams, options.legendParams);
+            }
+            if (options.hasOwnProperty('options')) {
+                $.extend(loptions, options.options);
+            }
+            // If no colormap is specified we unset legendParams
+            if (wmsParams.cmap === undefined) {
+                legendParams = undefined;
+            }
+            loptions.language = this.options.language;
+            output = {
+                'dataset': dataset,
+                'wmsParams': wmsParams,
+                'legendParams': legendParams,
+                'options': loptions
             };
-            var url = L.Util.getParamString(params);
-            return url;
+            return output;
         },
 
-        onAdd: function(map) {
-            this._map = map;
-            // Add legend when required info available
-            var that = this;
-            if (that.legendParams.show) {
-                var addLegend = function () {
-                    if (that._last_modified !== undefined) {
-                        that._legendControl = that._getLegendControl();
-                        if (that._legendControl !== null) {
-                            var legendId = that._legendId;
-                            if (that.legendParams.show) {
-                                that.legendParams.imageUrl = that._fcootileurl + that.getLegendUrl();
+        getLayer: function (options) {
+            var o = this.getLayerOptions(options),
+                layer = new L.TileLayer.WMS.Pydap(o.dataset, o.wmsParams, o.legendParams,
+                        o.options);
+            return layer;
+        },
+
+        model: {
+            DMI: {
+                HIRLAM: {
+                    legendParams: {
+                        updatesPerDay: 4
+                    },
+                    K05: {
+                        dataset: 'DMI/HIRLAM/MAPS_DMI_K05_v005C.nc',
+                        legendParams: {
+                            attribution: '<a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a> / HIRLAM / K05'
+                        },
+                        options: {
+                            zIndex: 850
+                        },
+                        visibility: {
+                            wmsParams: {
+                                layers: 'VIS',
+                                cmap: 'AirVisibility_km_RYG_11colors'
+                            },
+                            options: {
+                                attribution: 'Visibility forecasts from <a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a>'
                             }
-                            if (that.legendParams.show && that.legendParams.imageUrl !== null) {
-                                if (that.legendParams.longName === undefined) {
-                                    that.legendParams.longName = that._long_name;
-                                }
-                                if (that.legendParams.units === undefined) {
-                                    that.legendParams.units = that._units;
-                                }
-                                var legendOptions = {
-                                    'imageUrl': that.legendParams.imageUrl,
-                                    'attribution': that.legendParams.attribution,
-                                    'lastUpdated': that._last_modified,
-                                    'longName': that.legendParams.longName,
-                                    'units': that.legendParams.units
-                                };
-                                that._legendId = that._legendControl.addLegend(
-                                                legendOptions);
+                        },
+                        windSpeed: {
+                            wmsParams: {
+                                layers: 'windspeed',
+                                cmap: 'Wind_ms_BGYRP_11colors'
+                            },
+                            options: {
+                                attribution: 'Wind forecasts from <a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a>'
+                            }
+                        },
+                        windDirection: {
+                            wmsParams: {
+                                layers: 'UGRD:VGRD',
+                                styles: 'vector_method=black_arrowbarbs,vector_spacing=80,vector_offset=20',
+                                cmap: 'Wind_ms_BGYRP_11colors'
+                            },
+                            legendParams: {
+                                longName: 'Wind speed',
+                                show: false
+                            },
+                            options: {
+                                zIndex: 900,
+                                primadonna: false,
+                                attribution: 'Wind forecasts from <a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a>'
+                            }
+                        },
+                        humidity: {
+                            wmsParams: {
+                                layers: 'SPFH',
+                                cmap: 'Humidity_kg_kg_WYR_7colors'
+                            },
+                            options: {
+                                attribution: 'Humidity forecasts from <a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a>'
+                            }
+                        },
+                        airTemperature: {
+                            wmsParams: {
+                                layers: 'TMP',
+                                cmap: 'AirTempCold_C_BGYR_13colors'
+                            },
+                            options: {
+                                attribution: 'Temperature forecasts from <a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a>'
+                            }
+                        },
+                        seaLevelPressure: {
+                            wmsParams: {
+                                layers: 'PRES',
+                                cmap: 'SeaLevelPressure_hPa_BGYR_13colors',
+                                styles: 'fill_method=contour'
+                            },
+                            legendParams: {
+                                show: false
+                            },
+                            options: {
+                                zIndex: 875,
+                                primadonna: false,
+                                attribution: 'Sea level pressure forecasts from <a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a>'
+                            }
+                        },
+                        totalCloudCover: {
+                            wmsParams: {
+                                layers: 'TCDC',
+                                cmap: 'CloudCover_km_WGB_10colors'
+                            },
+                            options: {
+                                primadonna: false,
+                                attribution: 'Cloud cover forecasts from <a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a>'
+                            }
+                        },
+                        totalPrecipitation: {
+                            wmsParams: {
+                                layers: 'precip',
+                                cmap: 'Precip_mm_per_h_GBP_9colors',
+                            },
+                            options: {
+                                attribution: 'Precipitation forecasts from <a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a>',
                             }
                         }
-                    } else {
-                        setTimeout(addLegend, 10);
+                    },
+                    S03: {
+                        dataset: 'DMI/HIRLAM/MAPS_DMI_S03_v005C.nc',
+                        legendParams: {
+                            attribution: '<a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a> / HIRLAM / S03'
+                        },
+                        options: {
+                            zIndex: 850
+                        },
+                        visibility: {
+                            wmsParams: {
+                                layers: 'VIS',
+                                cmap: 'AirVisibility_km_RYG_11colors'
+                            },
+                            options: {
+                                attribution: 'Visibility forecasts from <a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a>'
+                            }
+                        },
+                        windSpeed: {
+                            wmsParams: {
+                                layers: 'windspeed',
+                                cmap: 'Wind_ms_BGYRP_11colors'
+                            },
+                            options: {
+                                attribution: 'Wind forecasts from <a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a>'
+                            }
+                        },
+                        windDirection: {
+                            wmsParams: {
+                                layers: 'UGRD:VGRD',
+                                styles: 'vector_method=black_arrowbarbs,vector_spacing=80,vector_offset=20',
+                                cmap: 'Wind_ms_BGYRP_11colors'
+                            },
+                            legendParams: {
+                                longName: 'Wind speed',
+                                show: false
+                            },
+                            options: {
+                                zIndex: 1050,
+                                primadonna: false,
+                                attribution: 'Wind forecasts from <a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a>'
+                            }
+                        },
+                        humidity: {
+                            wmsParams: {
+                                layers: 'SPFH',
+                                cmap: 'Humidity_kg_kg_WYR_7colors'
+                            },
+                            options: {
+                                attribution: 'Humidity forecasts from <a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a>'
+                            }
+                        },
+                        airTemperature: {
+                            wmsParams: {
+                                layers: 'TMP',
+                                cmap: 'AirTemp_C_BGYR_13colors'
+                            },
+                            options: {
+                                attribution: 'Temperature forecasts from <a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a>'
+                            }
+                        },
+                        seaLevelPressure: {
+                            wmsParams: {
+                                layers: 'PRES',
+                                cmap: 'SeaLevelPressure_hPa_BGYR_13colors',
+                                styles: 'fill_method=contour'
+                            },
+                            legendParams: {
+                                show: false
+                            },
+                            options: {
+                                zIndex: 875,
+                                primadonna: false,
+                                attribution: 'Sea level pressure forecasts from <a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a>'
+                            }
+                        },
+                        totalCloudCover: {
+                            wmsParams: {
+                                layers: 'TCDC',
+                                cmap: 'CloudCover_km_WGB_10colors'
+                            },
+                            options: {
+                                primadonna: false,
+                                attribution: 'Cloud cover forecasts from <a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a>'
+                            }
+                        },
+                        totalPrecipitation: {
+                            wmsParams: {
+                                layers: 'precip',
+                                cmap: 'Precip_mm_per_h_GBP_9colors',
+                            },
+                            options: {
+                                attribution: 'Precipitation forecasts from <a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a>',
+                            }
+                        }
+                    },
+                    T15: {
+                        dataset: 'DMI/HIRLAM/GETM_DMI_HIRLAM_T15_v004C.nc',
+                        legendParams: {
+                            attribution: '<a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a> / HIRLAM / T15'
+                        },
+                        options: {
+                            zIndex: 850
+                        },
+                        windSpeed: {
+                            wmsParams: {
+                                layers: 'u10_v10',
+                                cmap: 'Wind_ms_BGYRP_11colors'
+                            },
+                            options: {
+                                attribution: 'Wind forecasts from <a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a>'
+                            }
+                        },
+                        windDirection: {
+                            wmsParams: {
+                                layers: 'u10:v10',
+                                styles: 'vector_method=black_arrowbarbs,vector_spacing=80,vector_offset=20',
+                                cmap: 'Wind_ms_BGYRP_11colors'
+                            },
+                            legendParams: {
+                                longName: 'Wind speed',
+                                show: false
+                            },
+                            options: {
+                                zIndex: 900,
+                                primadonna: false,
+                                attribution: 'Wind forecasts from <a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a>'
+                            }
+                        },
+                        humidity: {
+                            wmsParams: {
+                                layers: 'sh',
+                                cmap: 'Humidity_kg_kg_WYR_7colors'
+                            },
+                            options: {
+                                attribution: 'Humidity forecasts from <a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a>'
+                            }
+                        },
+                        airTemperature: {
+                            wmsParams: {
+                                layers: 't2',
+                                cmap: 'AirTemp_C_BGYR_13colors'
+                            },
+                            options: {
+                                attribution: 'Temperature forecasts from <a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a>'
+                            }
+                        },
+                        seaLevelPressure: {
+                            wmsParams: {
+                                layers: 'slp',
+                                cmap: 'SeaLevelPressure_hPa_BGYR_13colors',
+                                styles: 'fill_method=contour'
+                            },
+                            legendParams: {
+                                show: false
+                            },
+                            options: {
+                                zIndex: 875,
+                                primadonna: false,
+                                attribution: 'Sea level pressure forecasts from <a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a>'
+                            }
+                        },
+                        totalCloudCover: {
+                            wmsParams: {
+                                layers: 'tcc',
+                                cmap: 'CloudCover_km_WGB_10colors'
+                            },
+                            options: {
+                                primadonna: false,
+                                attribution: 'Cloud cover forecasts from <a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a>'
+                            }
+                        }
                     }
-                };
-                addLegend();
+                },
+                ICECHART: {
+                    GREENLAND: {
+                        dataset: 'DMI/ICECHART/DMI_ICECHART.nc',
+                        legendParams: {
+                            attribution: '<a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a> / ICE CHART'
+                        },
+                        options: {
+                            zIndex: 100
+                        },
+                        iceConcentration: {
+                            wmsParams: {
+                                layers: 'ice_concentration',
+                                cmap: 'IceConcentration_BW_10colors',
+                                time: 'current'
+                            },
+                            options: {
+                                attribution: 'Sea ice concentration from <a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a>',
+                            }
+                        }
+                    }
+                }
+            },
+            ECMWF: {
+                DXD: {
+                    legendParams: {
+                        updatesPerDay: 2
+                    },
+                    AFR: {
+                        dataset: 'ECMWF/DXD/MAPS_ECMWF_DXD_AFR.nc',
+                        legendParams: {
+                            attribution: '<a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a> / IFS'
+                        },
+                        options: {
+                            zIndex: 850
+                        },
+                        windSpeed: {
+                            wmsParams: {
+                                layers: 'windspeed',
+                                cmap: 'Wind_ms_BGYRP_11colors'
+                            },
+                            options: {
+                                attribution: 'Wind forecasts from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                            }
+                        },
+                        windDirection: {
+                            wmsParams: {
+                                layers: 'U10:V10',
+                                styles: 'vector_method=black_arrowbarbs,vector_spacing=80,vector_offset=20',
+                                cmap: 'Wind_ms_BGYRP_11colors'
+                            },
+                            legendParams: {
+                                longName: 'Wind speed',
+                                show: false
+                            },
+                            options: {
+                                zIndex: 1050,
+                                primadonna: false,
+                                attribution: 'Wind forecasts from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                            }
+                        },
+                        airTemperature: {
+                            wmsParams: {
+                                layers: 'TMP2',
+                                cmap: 'AirTempWarm_C_BGYR_13colors'
+                            },
+                            options: {
+                                attribution: 'Temperature forecasts from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                            }
+                        },
+                        seaLevelPressure: {
+                            wmsParams: {
+                                layers: 'PRES',
+                                cmap: 'SeaLevelPressure_hPa_BGYR_13colors',
+                                styles: 'fill_method=contour'
+                            },
+                            legendParams: {
+                                show: false
+                            },
+                            options: {
+                                zIndex: 875,
+                                primadonna: false,
+                                attribution: 'Sea level pressure forecasts from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                            }
+                        },
+                        totalCloudCover: {
+                            wmsParams: {
+                                layers: 'TCC',
+                                cmap: 'CloudCover_km_WGB_10colors'
+                            },
+                            options: {
+                                primadonna: false,
+                                attribution: 'Cloud cover forecasts from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                            }
+                        },
+                        totalPrecipitation: {
+                            wmsParams: {
+                                layers: 'precip',
+                                cmap: 'Precip_mm_per_h_GBP_9colors',
+                            },
+                            options: {
+                                attribution: 'Precipitation forecasts from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                            }
+                        }
+                    },
+                    MEDITERRANEAN: {
+                        dataset: 'ECMWF/DXD/MAPS_ECMWF_DXD_MEDITERRANEAN.nc',
+                        legendParams: {
+                            attribution: '<a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a> / IFS'
+                        },
+                        options: {
+                            zIndex: 850
+                        },
+                        windSpeed: {
+                            wmsParams: {
+                                layers: 'windspeed',
+                                cmap: 'Wind_ms_BGYRP_11colors'
+                            },
+                            options: {
+                                attribution: 'Wind forecasts from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                            }
+                        },
+                        windDirection: {
+                            wmsParams: {
+                                layers: 'U10:V10',
+                                styles: 'vector_method=black_arrowbarbs,vector_spacing=80,vector_offset=20',
+                                cmap: 'Wind_ms_BGYRP_11colors'
+                            },
+                            legendParams: {
+                                longName: 'Wind speed',
+                                show: false
+                            },
+                            options: {
+                                zIndex: 1050,
+                                primadonna: false,
+                                attribution: 'Wind forecasts from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                            }
+                        },
+                        airTemperature: {
+                            wmsParams: {
+                                layers: 'TMP2',
+                                cmap: 'AirTempWarm_C_BGYR_13colors'
+                            },
+                            options: {
+                                attribution: 'Temperature forecasts from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                            }
+                        },
+                        seaLevelPressure: {
+                            wmsParams: {
+                                layers: 'PRES',
+                                cmap: 'SeaLevelPressure_hPa_BGYR_13colors',
+                                styles: 'fill_method=contour'
+                            },
+                            legendParams: {
+                                show: false
+                            },
+                            options: {
+                                zIndex: 875,
+                                primadonna: false,
+                                attribution: 'Sea level pressure forecasts from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                            }
+                        },
+                        totalCloudCover: {
+                            wmsParams: {
+                                layers: 'TCC',
+                                cmap: 'CloudCover_km_WGB_10colors'
+                            },
+                            options: {
+                                primadonna: false,
+                                attribution: 'Cloud cover forecasts from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                            }
+                        },
+                        totalPrecipitation: {
+                            wmsParams: {
+                                layers: 'precip',
+                                cmap: 'Precip_mm_per_h_GBP_9colors',
+                            },
+                            options: {
+                                attribution: 'Precipitation forecasts from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                            }
+                        }
+                    },
+                    DENMARK: {
+                        dataset: 'ECMWF/DXD/MAPS_ECMWF_DXD_DENMARK.nc',
+                        legendParams: {
+                            attribution: '<a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a> / IFS'
+                        },
+                        options: {
+                            zIndex: 850
+                        },
+                        windSpeed: {
+                            wmsParams: {
+                                layers: 'windspeed',
+                                cmap: 'Wind_ms_BGYRP_11colors'
+                            },
+                            options: {
+                                attribution: 'Wind forecasts from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                            }
+                        },
+                        windDirection: {
+                            wmsParams: {
+                                layers: 'U10:V10',
+                                styles: 'vector_method=black_arrowbarbs,vector_spacing=80,vector_offset=20',
+                                cmap: 'Wind_ms_BGYRP_11colors'
+                            },
+                            legendParams: {
+                                longName: 'Wind speed',
+                                show: false
+                            },
+                            options: {
+                                zIndex: 1050,
+                                primadonna: false,
+                                attribution: 'Wind forecasts from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                            }
+                        },
+                        airTemperature: {
+                            wmsParams: {
+                                layers: 'TMP2',
+                                cmap: 'AirTemp_C_BGYR_13colors'
+                            },
+                            options: {
+                                attribution: 'Temperature forecasts from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                            }
+                        },
+                        seaLevelPressure: {
+                            wmsParams: {
+                                layers: 'PRES',
+                                cmap: 'SeaLevelPressure_hPa_BGYR_13colors',
+                                styles: 'fill_method=contour'
+                            },
+                            legendParams: {
+                                show: false
+                            },
+                            options: {
+                                zIndex: 875,
+                                primadonna: false,
+                                attribution: 'Sea level pressure forecasts from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                            }
+                        },
+                        totalCloudCover: {
+                            wmsParams: {
+                                layers: 'TCC',
+                                cmap: 'CloudCover_km_WGB_10colors'
+                            },
+                            options: {
+                                primadonna: false,
+                                attribution: 'Cloud cover forecasts from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                            }
+                        },
+                        totalPrecipitation: {
+                            wmsParams: {
+                                layers: 'precip',
+                                cmap: 'Precip_mm_per_h_GBP_9colors',
+                            },
+                            options: {
+                                attribution: 'Precipitation forecasts from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                            }
+                        }
+                    },
+                    GREENLAND: {
+                        dataset: 'ECMWF/DXD/MAPS_ECMWF_DXD_GREENLAND.nc',
+                        legendParams: {
+                            attribution: '<a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a> / IFS'
+                        },
+                        options: {
+                            zIndex: 850
+                        },
+                        windSpeed: {
+                            wmsParams: {
+                                layers: 'windspeed',
+                                cmap: 'Wind_ms_BGYRP_11colors'
+                            },
+                            options: {
+                                attribution: 'Wind forecasts from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                            }
+                        },
+                        windDirection: {
+                            wmsParams: {
+                                layers: 'U10:V10',
+                                styles: 'vector_method=black_arrowbarbs,vector_spacing=80,vector_offset=20',
+                                cmap: 'Wind_ms_BGYRP_11colors'
+                            },
+                            legendParams: {
+                                longName: 'Wind speed',
+                                show: false
+                            },
+                            options: {
+                                zIndex: 1050,
+                                primadonna: false,
+                                attribution: 'Wind forecasts from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                            }
+                        },
+                        airTemperature: {
+                            wmsParams: {
+                                layers: 'TMP2',
+                                cmap: 'AirTempCold_C_BGYR_13colors'
+                            },
+                            options: {
+                                attribution: 'Temperature forecasts from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                            }
+                        },
+                        seaLevelPressure: {
+                            wmsParams: {
+                                layers: 'PRES',
+                                cmap: 'SeaLevelPressure_hPa_BGYR_13colors',
+                                styles: 'fill_method=contour'
+                            },
+                            legendParams: {
+                                show: false
+                            },
+                            options: {
+                                zIndex: 875,
+                                primadonna: false,
+                                attribution: 'Sea level pressure forecasts from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                            }
+                        },
+                        totalCloudCover: {
+                            wmsParams: {
+                                layers: 'TCC',
+                                cmap: 'CloudCover_km_WGB_10colors'
+                            },
+                            options: {
+                                primadonna: false,
+                                attribution: 'Cloud cover forecasts from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                            }
+                        },
+                        totalPrecipitation: {
+                            wmsParams: {
+                                layers: 'precip',
+                                cmap: 'Precip_mm_per_h_GBP_9colors',
+                            },
+                            options: {
+                                attribution: 'Precipitation forecasts from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                            }
+                        },
+                        iceConcentation: {
+                            wmsParams: {
+                                layers: 'CI',
+                                cmap: 'IceConcentration_BW_10colors'
+                            },
+                            options: {
+                                attribution: 'Sea ice concentration from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                            }
+                        }
+                    }
+                },
+                DXP: {
+                    legendParams: {
+                        updatesPerDay: 2
+                    },
+                    AFR: {
+                        dataset: 'ECMWF/DXP/MAPS_ECMWF_DXP_AFR.nc',
+                        legendParams: {
+                            attribution: '<a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a> / WAM'
+                        },
+                        options: {
+                            zIndex: 100,
+                            foreground: true,
+                            attribution: 'Wave forecasts from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                        },
+                        waveHeight: {
+                            wmsParams: {
+                                layers: 'SWH',
+                                cmap: 'Hs_m_GBP_11colors'
+                            }
+                        },
+                        seaState: {
+                            wmsParams: {
+                                layers: 'SWH',
+                                cmap: 'Hs_m_JET_10colors'
+                            },
+                            legendParams: {
+                                longName: 'WMO Sea State Code',
+                                units: '',
+                                styles: 'horizontal,nolabel,centerlabels',
+                                cmap: 'Hs_ss_JET_10colors'
+                            },
+                        },
+                        waveDirection: {
+                            wmsParams: {
+                                layers: 'uwave:vwave',
+                                styles: 'vector_method=black_vector,vector_spacing=60,vector_offset=10',
+                            },
+                            legendParams: {
+                                show: false
+                            },
+                            options: {
+                                zIndex: 900,
+                                primadonna: false
+                            }
+                        },
+                        wavePeriod: {
+                            wmsParams: {
+                                layers: 'MWP',
+                                cmap: 'MeanPeriod_s_RGB_10colors',
+                            }
+                        }
+                    },
+                    MEDITERRANEAN: {
+                        dataset: 'ECMWF/DXP/MAPS_ECMWF_DXP_MEDITERRANEAN.nc',
+                        legendParams: {
+                            attribution: '<a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a> / WAM'
+                        },
+                        options: {
+                            zIndex: 100,
+                            foreground: true,
+                            attribution: 'Wave forecasts from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                        },
+                        waveHeight: {
+                            wmsParams: {
+                                layers: 'SWH',
+                                cmap: 'Hs_m_GBP_11colors'
+                            }
+                        },
+                        seaState: {
+                            wmsParams: {
+                                layers: 'SWH',
+                                cmap: 'Hs_m_JET_10colors'
+                            },
+                            legendParams: {
+                                longName: 'WMO Sea State Code',
+                                units: '',
+                                styles: 'horizontal,nolabel,centerlabels',
+                                cmap: 'Hs_ss_JET_10colors'
+                            },
+                        },
+                        waveDirection: {
+                            wmsParams: {
+                                layers: 'uwave:vwave',
+                                styles: 'vector_method=black_vector,vector_spacing=60,vector_offset=10',
+                            },
+                            legendParams: {
+                                show: false
+                            },
+                            options: {
+                                zIndex: 900,
+                                primadonna: false
+                            }
+                        },
+                        wavePeriod: {
+                            wmsParams: {
+                                layers: 'MWP',
+                                cmap: 'MeanPeriod_s_RGB_10colors',
+                            }
+                        }
+                    },
+                    DENMARK: {
+                        dataset: 'ECMWF/DXP/MAPS_ECMWF_DXP_DENMARK.nc',
+                        legendParams: {
+                            attribution: '<a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a> / WAM'
+                        },
+                        options: {
+                            zIndex: 100,
+                            foreground: true,
+                            attribution: 'Wave forecasts from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                        },
+                        waveHeight: {
+                            wmsParams: {
+                                layers: 'SWH',
+                                cmap: 'Hs_m_GBP_11colors_denmark'
+                            }
+                        },
+                        seaState: {
+                            wmsParams: {
+                                layers: 'SWH',
+                                cmap: 'Hs_m_JET_10colors'
+                            },
+                            legendParams: {
+                                longName: 'WMO Sea State Code',
+                                units: '',
+                                styles: 'horizontal,nolabel,centerlabels',
+                                cmap: 'Hs_ss_JET_10colors'
+                            },
+                        },
+                        waveDirection: {
+                            wmsParams: {
+                                layers: 'uwave:vwave',
+                                styles: 'vector_method=black_vector,vector_spacing=60,vector_offset=10',
+                            },
+                            legendParams: {
+                                show: false
+                            },
+                            options: {
+                                zIndex: 900,
+                                primadonna: false
+                            }
+                        },
+                        wavePeriod: {
+                            wmsParams: {
+                                layers: 'MWP',
+                                cmap: 'MeanPeriod_s_RGB_10colors',
+                            }
+                        }
+                    },
+                    GREENLAND: {
+                        dataset: 'ECMWF/DXP/MAPS_ECMWF_DXP_GREENLAND.nc',
+                        legendParams: {
+                            attribution: '<a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a> / WAM'
+                        },
+                        options: {
+                            zIndex: 100,
+                            foreground: true,
+                            attribution: 'Wave forecasts from <a href="http://www.ecmwf.int" alt="European Centre for Medium-Range Weather Forecasts">ECMWF</a>'
+                        },
+                        waveHeight: {
+                            wmsParams: {
+                                layers: 'SWH',
+                                cmap: 'Hs_m_GBP_11colors'
+                            }
+                        },
+                        seaState: {
+                            wmsParams: {
+                                layers: 'SWH',
+                                cmap: 'Hs_m_JET_10colors'
+                            },
+                            legendParams: {
+                                longName: 'WMO Sea State Code',
+                                units: '',
+                                styles: 'horizontal,nolabel,centerlabels',
+                                cmap: 'Hs_ss_JET_10colors'
+                            },
+                        },
+                        waveDirection: {
+                            wmsParams: {
+                                layers: 'uwave:vwave',
+                                styles: 'vector_method=black_vector,vector_spacing=60,vector_offset=10',
+                            },
+                            legendParams: {
+                                show: false
+                            },
+                            options: {
+                                zIndex: 900,
+                                primadonna: false
+                            }
+                        },
+                        wavePeriod: {
+                            wmsParams: {
+                                layers: 'MWP',
+                                cmap: 'MeanPeriod_s_RGB_10colors',
+                            }
+                        }
+                    }
+                }
+            },
+            FCOO: {
+                legendParams: {
+                    updatesPerDay: 4
+                },
+                GETM: {
+                    DK_MERGED: {
+                        legendParams: {
+                            attribution: '<a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a> / GETM'
+                        },
+                        options: {
+                            zIndex: 100,
+                            foreground: true,
+                        },
+                        currentSpeed3D: {
+                            dataset: 'FCOO/GETM/dk_nested.velocities.Z3D.nc',
+                            wmsParams: {
+                                layers: 'uu_vv_dk,uu_vv_idk',
+                                cmap: 'Current_kn_WGYR_11colors',
+                            },
+                            options: {
+                                attribution: 'Current forecasts from <a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a>'
+                            }
+                        },
+                        currentDirection3D: {
+                            dataset: 'FCOO/GETM/dk_nested.velocities.Z3D.nc',
+                            wmsParams: {
+                                layers: 'uu_dk:vv_dk,uu_idk:vv_idk',
+                                styles: 'vector_method=black_vector,vector_color=0.1',
+                                cmap: 'Current_kn_WGYR_11colors'
+                            },
+                            legendParams: {
+                                longName: 'Current speed',
+                                show: false
+                            },
+                            options: {
+                                zIndex: 900,
+                                primadonna: false,
+                                attribution: 'Current forecasts from <a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a>'
+                            }
+                        },
+                        salinity3D: {
+                            dataset: 'FCOO/GETM/dk_nested.salt-temp.Z3D.nc',
+                            wmsParams: {
+                                layers: 'salt_dk,salt_idk',
+                                cmap: 'PrSal_psu_GB_14colors',
+                            },
+                            options: {
+                                attribution: 'Salinity forecasts from <a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a>'
+                            }
+                        },
+                        temperature3D: {
+                            dataset: 'FCOO/GETM/dk_nested.salt-temp.Z3D.nc',
+                            wmsParams: {
+                                layers: 'temp_dk,temp_idk',
+                                cmap: 'SeaTemp_C_BGYR_14colors',
+                            },
+                            options: {
+                                attribution: 'Temperature forecasts from <a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a>'
+                            }
+                        }
+                    },
+                    NSBALTIC_MERGED: {
+                        legendParams: {
+                            attribution: '<a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a> / GETM'
+                        },
+                        options: {
+                            zIndex: 100,
+                            foreground: true,
+                        },
+                        currentSpeed: {
+                            dataset: 'FCOO/GETM/nsbalt_nested.velocities.nc',
+                            wmsParams: {
+                                layers: 'uu_vv_nsbalt,uu_vv_idk',
+                                cmap: 'Current_kn_WGYR_11colors',
+                            },
+                            options: {
+                                attribution: 'Current forecasts from <a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a>'
+                            }
+                        },
+                        currentDirection: {
+                            dataset: 'FCOO/GETM/nsbalt_nested.velocities.nc',
+                            wmsParams: {
+                                layers: 'uu_nsbalt:vv_nsbalt,uu_idk:vv_idk',
+                                styles: 'vector_method=black_vector,vector_color=0.1',
+                                cmap: 'Current_kn_WGYR_11colors'
+                            },
+                            legendParams: {
+                                longName: 'Current speed',
+                                show: false
+                            },
+                            options: {
+                                zIndex: 900,
+                                primadonna: false,
+                                attribution: 'Current forecasts from <a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a>'
+                            }
+                        },
+                        seaLevel: {
+                            dataset: 'FCOO/GETM/nsbalt_nested.2Dvars.nc',
+                            wmsParams: {
+                                layers: 'elev_nsbalt,elev_idk',
+                                cmap: 'SeaLvl_m_BWR_13colors',
+                            },
+                            options: {
+                                attribution: 'Elevation forecasts from <a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a>'
+                            }
+                        },
+                        sss: {
+                            dataset: 'FCOO/GETM/nsbalt_nested.salt-temp.nc',
+                            wmsParams: {
+                                layers: 'salt_nsbalt,salt_idk',
+                                cmap: 'PrSal_psu_GB_14colors',
+                            },
+                            options: {
+                                attribution: 'Sea surface salinity forecasts from <a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a>'
+                            }
+                        },
+                        sst: {
+                            dataset: 'FCOO/GETM/nsbalt_nested.salt-temp.nc',
+                            wmsParams: {
+                                layers: 'temp_nsbalt,temp_idk',
+                                cmap: 'SeaTemp_C_BGYR_14colors',
+                            },
+                            options: {
+                                attribution: 'Sea surface temperature forecasts from <a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a>'
+                            }
+                        }
+                    },
+                    DKINNER: {
+                        legendParams: {
+                            attribution: '<a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a> / GETM'
+                        },
+                        options: {
+                            zIndex: 100,
+                            foreground: true,
+                        },
+                        currentSpeed: {
+                            dataset: 'FCOO/GETM/idk.velocities.600m.surface.1h.DK600-v004C.nc',
+                            wmsParams: {
+                                layers: 'uu_vv',
+                                cmap: 'Current_kn_WGYR_11colors',
+                            },
+                            options: {
+                                attribution: 'Current forecasts from <a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a>'
+                            }
+                        },
+                        currentDirection: {
+                            dataset: 'FCOO/GETM/idk.velocities.600m.surface.1h.DK600-v004C.nc',
+                            wmsParams: {
+                                layers: 'uu:vv',
+                                styles: 'vector_method=black_vector,vector_color=0.1',
+                                cmap: 'Current_kn_WGYR_11colors'
+                            },
+                            legendParams: {
+                                longName: 'Current speed',
+                                show: false
+                            },
+                            options: {
+                                zIndex: 900,
+                                primadonna: false,
+                                attribution: 'Current forecasts from <a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a>'
+                            }
+                        },
+                        seaLevel: {
+                            dataset: 'FCOO/GETM/idk.2Dvars.600m.2D.1h.DK600-v004C.nc',
+                            wmsParams: {
+                                layers: 'elev',
+                                cmap: 'SeaLvl_m_BWR_13colors',
+                            },
+                            options: {
+                                attribution: 'Elevation forecasts from <a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a>'
+                            }
+                        },
+                        sss: {
+                            dataset: 'FCOO/GETM/idk.salt-temp.600m.surface.1h.DK600-v004C.nc',
+                            wmsParams: {
+                                layers: 'salt',
+                                cmap: 'PrSal_psu_GB_14colors',
+                            },
+                            options: {
+                                attribution: 'Sea surface salinity forecasts from <a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a>'
+                            }
+                        },
+                        sst: {
+                            dataset: 'FCOO/GETM/idk.salt-temp.600m.surface.1h.DK600-v004C.nc',
+                            wmsParams: {
+                                layers: 'temp',
+                                cmap: 'SeaTemp_C_BGYR_14colors',
+                            },
+                            options: {
+                                attribution: 'Sea surface temperature forecasts from <a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a>'
+                            }
+                        }
+                    },
+                    NSBALTIC: {
+                        legendParams: {
+                            attribution: '<a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a> / GETM'
+                        },
+                        options: {
+                            zIndex: 100,
+                            foreground: true,
+                        },
+                        currentSpeed: {
+                            dataset: 'FCOO/GETM/nsbalt.velocities.1nm.surface.1h.DK1NM-v002C.nc',
+                            wmsParams: {
+                                layers: 'uu_vv',
+                                cmap: 'Current_kn_WGYR_11colors',
+                            },
+                            options: {
+                                attribution: 'Current forecasts from <a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a>'
+                            }
+                        },
+                        currentDirection: {
+                            dataset: 'FCOO/GETM/nsbalt.velocities.1nm.surface.1h.DK1NM-v002C.nc',
+                            wmsParams: {
+                                layers: 'uu:vv',
+                                styles: 'vector_method=black_vector,vector_color=0.1',
+                                cmap: 'Current_kn_WGYR_11colors'
+                            },
+                            legendParams: {
+                                longName: 'Current speed',
+                                show: false
+                            },
+                            options: {
+                                zIndex: 900,
+                                primadonna: false,
+                                attribution: 'Current forecasts from <a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a>'
+                            }
+                        },
+                        seaLevel: {
+                            dataset: 'FCOO/GETM/nsbalt.2Dvars.1nm.2D.1h.DK1NM-v002C.nc',
+                            wmsParams: {
+                                layers: 'elev',
+                                cmap: 'SeaLvl_m_BWR_13colors',
+                            },
+                            options: {
+                                attribution: 'Elevation forecasts from <a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a>'
+                            }
+                        },
+                        sss: {
+                            dataset: 'FCOO/GETM/nsbalt.salt-temp.1nm.surface.1h.DK1NM-v002C.nc',
+                            wmsParams: {
+                                layers: 'salt',
+                                cmap: 'PrSal_psu_GB_14colors',
+                            },
+                            options: {
+                                attribution: 'Sea surface salinity forecasts from <a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a>'
+                            }
+                        },
+                        sst: {
+                            dataset: 'FCOO/GETM/nsbalt.salt-temp.1nm.surface.1h.DK1NM-v002C.nc',
+                            wmsParams: {
+                                layers: 'temp',
+                                cmap: 'SeaTemp_C_BGYR_14colors',
+                            },
+                            options: {
+                                attribution: 'Sea surface temperature forecasts from <a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a>'
+                            }
+                        }
+                    }
+                },
+                WW3: {
+                    NSBALTIC_MERGED: {
+                        dataset: 'FCOO/WW3/ww3.nsbalt_nested.nc',
+                        legendParams: {
+                            attribution: '<a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a> / WW3'
+                        },
+                        options: {
+                            zIndex: 100,
+                            foreground: true,
+                            attribution: 'Wave forecasts from <a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a>'
+                        },
+                        waveHeight: {
+                            wmsParams: {
+                                layers: 'u_v_nsbalt,u_v_dkinner',
+                                cmap: 'Hs_m_GBP_11colors_denmark'
+                            }
+                        },
+                        seaState: {
+                            wmsParams: {
+                                layers: 'u_v_nsbalt,u_v_dkinner',
+                                cmap: 'Hs_m_JET_10colors'
+                            },
+                            legendParams: {
+                                longName: 'WMO Sea State Code',
+                                units: '',
+                                styles: 'horizontal,nolabel,centerlabels',
+                                cmap: 'Hs_ss_JET_10colors'
+                            },
+                        },
+                        waveDirection: {
+                            wmsParams: {
+                                layers: 'u_nsbalt:v_nsbalt,u_dkinner:v_dkinner',
+                                styles: 'vector_method=black_vector,vector_spacing=60,vector_offset=10',
+                            },
+                            legendParams: {
+                                show: false
+                            },
+                            options: {
+                                zIndex: 900,
+                                primadonna: false
+                            }
+                        },
+                        wavePeriod: {
+                            wmsParams: {
+                                layers: 'TMN_nsbalt,TMN_dkinner',
+                                cmap: 'MeanPeriod_s_RGB_10colors',
+                            }
+                        }
+                    },
+                    DKINNER: {
+                        dataset: 'FCOO/WW3/ww3fcast_grd_DKinner_v006C.nc',
+                        legendParams: {
+                            attribution: '<a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a> / WW3'
+                        },
+                        options: {
+                            zIndex: 100,
+                            foreground: true,
+                            attribution: 'Wave forecasts from <a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a>'
+                        },
+                        waveHeight: {
+                            wmsParams: {
+                                layers: 'u_v',
+                                cmap: 'Hs_m_GBP_11colors_denmark'
+                            }
+                        },
+                        seaState: {
+                            wmsParams: {
+                                layers: 'u_v',
+                                cmap: 'Hs_m_JET_10colors'
+                            },
+                            legendParams: {
+                                longName: 'WMO Sea State Code',
+                                units: '',
+                                styles: 'horizontal,nolabel,centerlabels',
+                                cmap: 'Hs_ss_JET_10colors'
+                            },
+                        },
+                        waveDirection: {
+                            wmsParams: {
+                                layers: 'u:v',
+                                styles: 'vector_method=black_vector,vector_spacing=60,vector_offset=10',
+                            },
+                            legendParams: {
+                                show: false
+                            },
+                            options: {
+                                zIndex: 900,
+                                primadonna: false
+                            }
+                        },
+                        wavePeriod: {
+                            wmsParams: {
+                                layers: 'TMN',
+                                cmap: 'MeanPeriod_s_RGB_10colors',
+                            }
+                        }
+                    },
+                    NSBALTIC: {
+                        dataset: 'FCOO/WW3/ww3c_NSBALT3NM_v001C-FCAST.nc',
+                        legendParams: {
+                            attribution: '<a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a> / WW3'
+                        },
+                        options: {
+                            zIndex: 100,
+                            foreground: true,
+                            attribution: 'Wave forecasts from <a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a>'
+                        },
+                        waveHeight: {
+                            wmsParams: {
+                                layers: 'u_v',
+                                cmap: 'Hs_m_GBP_11colors_denmark'
+                            }
+                        },
+                        seaState: {
+                            wmsParams: {
+                                layers: 'u_v',
+                                cmap: 'Hs_m_JET_10colors'
+                            },
+                            legendParams: {
+                                longName: 'WMO Sea State Code',
+                                units: '',
+                                styles: 'horizontal,nolabel,centerlabels',
+                                cmap: 'Hs_ss_JET_10colors'
+                            },
+                        },
+                        waveDirection: {
+                            wmsParams: {
+                                layers: 'u:v',
+                                styles: 'vector_method=black_vector,vector_spacing=60,vector_offset=10',
+                            },
+                            legendParams: {
+                                show: false
+                            },
+                            options: {
+                                zIndex: 900,
+                                primadonna: false
+                            }
+                        },
+                        wavePeriod: {
+                            wmsParams: {
+                                layers: 'TMN',
+                                cmap: 'MeanPeriod_s_RGB_10colors',
+                            }
+                        }
+                    },
+                    ARCTIC: {
+                        dataset: 'FCOO/WW3/WW3_Arctic_geo9nm_v001C.nc',
+                        legendParams: {
+                            attribution: '<a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a> / WW3'
+                        },
+                        options: {
+                            zIndex: 100,
+                            foreground: true,
+                            attribution: 'Wave forecasts from <a href="http://fcoo.dk" alt="Danish Defence Center for Operational Oceanography">FCOO</a>'
+                        },
+                        waveHeight: {
+                            wmsParams: {
+                                layers: 'u_v',
+                                cmap: 'Hs_m_GBP_11colors'
+                            }
+                        },
+                        seaState: {
+                            wmsParams: {
+                                layers: 'u_v',
+                                cmap: 'Hs_m_JET_10colors'
+                            },
+                            legendParams: {
+                                longName: 'WMO Sea State Code',
+                                units: '',
+                                styles: 'horizontal,nolabel,centerlabels',
+                                cmap: 'Hs_ss_JET_10colors'
+                            },
+                        },
+                        waveDirection: {
+                            wmsParams: {
+                                layers: 'u:v',
+                                styles: 'vector_method=black_vector,vector_spacing=60,vector_offset=10',
+                            },
+                            legendParams: {
+                                show: false
+                            },
+                            options: {
+                                zIndex: 900,
+                                primadonna: false
+                            }
+                        },
+                        wavePeriod: {
+                            wmsParams: {
+                                layers: 'TMN',
+                                cmap: 'MeanPeriod_s_RGB_10colors',
+                            }
+                        }
+                    },
+                }
+            },
+            STENNIS: {
+                ACNFS_ICE: {
+                    legendParams: {
+                        updatesPerDay: 1
+                    },
+                    GREENLAND: {
+                        dataset: 'STENNIS/ACNFS/hycom-cice_ARCu0.08_fcast.nc',
+                        legendParams: {
+                            attribution: '<a href="http://www.usno.navy.mil/NAVO" alt="The Naval Oceanographic Office">NAVO</a> / ACNFS'
+                        },
+                        options: {
+                            zIndex: 100
+                        },
+                        iceConcentration: {
+                            wmsParams: {
+                                layers: 'aice',
+                                cmap: 'IceConcentration_BW_10colors',
+                            },
+                            options: {
+                                attribution: 'Sea ice forecasts from <a href="http://www.usno.navy.mil/NAVO" alt="The Naval Oceanographic Office">NAVO</a>'
+                            }
+                        },
+                        iceThickness: {
+                            wmsParams: {
+                                layers: 'hi',
+                                cmap: 'IceThickness_BGYR_14colors',
+                            },
+                            options: {
+                                attribution: 'Sea ice forecasts from <a href="http://www.usno.navy.mil/NAVO" alt="The Naval Oceanographic Office">NAVO</a>'
+                            }
+                        },
+                        iceSpeed: {
+                            wmsParams: {
+                                layers: 'icespeed',
+                                cmap: 'Current_kn_WGYR_11colors',
+                            },
+                            options: {
+                                attribution: 'Sea ice forecasts from <a href="http://www.usno.navy.mil/NAVO" alt="The Naval Oceanographic Office">NAVO</a>'
+                            }
+                        },
+                        iceDirection: {
+                            wmsParams: {
+                                layers: 'uvel:vvel',
+                                styles: 'vector_method=black_vector,vector_offset=10,vector_color=0.3'
+                            },
+                            legendParams: {
+                                show: false
+                            },
+                            options: {
+                                zIndex: 900,
+                                primadonna: false,
+                                attribution: 'Sea ice forecasts from <a href="http://www.usno.navy.mil/NAVO" alt="The Naval Oceanographic Office">NAVO</a>'
+                            }
+                        }
+                    }
+                }
+            },
+            NOAA: {
+                GFS: {
+                    legendParams: {
+                        attribution: '<a href="http://noaa.gov" alt="National Oceanic and Atmospheric Administration">NOAA</a> / GFS'
+                    },
+                    options: {
+                        zIndex: 900
+                    },
+                    Global: {
+                        visibility: {
+                            dataset: 'NOAA/GFS/NOAA_GFS_VISIBILITY.nc',
+                            wmsParams: {
+                                layers: 'vis',
+                                cmap: 'AirVisibility_km_RYG_11colors'
+                            },
+                            options: {
+                                attribution: 'Visibility forecasts from <a href="http://noaa.gov" alt="National Oceanic and Atmospheric Administration">NOAA</a>'
+                            }
+                        }
+                    }
+                },
+                HYCOM: {
+                    legendParams: {
+                        updatesPerDay: 1,
+                        attribution: '<a href="http://noaa.gov" alt="National Oceanic and Atmospheric Administration">NOAA</a> / HYCOM'
+                    },
+                    options: {
+                        zIndex: 100,
+                        foreground: true
+                    },
+                    GREENLAND: {
+                        dataset: 'NOAA/HYCOM/NOAA_HYCOM_GREENLAND.nc',
+                        currentSpeed: {
+                            wmsParams: {
+                                layers: 'u_velocity_v_velocity',
+                                cmap: 'CurrentArctic_kn_WGYR_11colors'
+                            },
+                            options: {
+                                attribution: 'Current forecasts from <a href="http://noaa.gov" alt="National Oceanic and Atmospheric Administration">NOAA</a>'
+                            }
+                        },
+                        currentDirection: {
+                            wmsParams: {
+                                layers: 'u_velocity:v_velocity',
+                                styles: 'vector_method=black_vector,vector_color=0.1',
+                                cmap: 'CurrentArctic_kn_WGYR_11colors'
+                            },
+                            legendParams: {
+                                longName: 'Current speed',
+                                show: false
+                            },
+                            options: {
+                                zIndex: 900,
+                                primadonna: false,
+                                attribution: 'Current forecasts from <a href="http://noaa.gov" alt="National Oceanic and Atmospheric Administration">NOAA</a>'
+                            }
+                        },
+                        sss: {
+                            wmsParams: {
+                                layers: 'sss',
+                                cmap: 'PrSalArctic_psu_GB_14colors'
+                            },
+                            options: {
+                                attribution: 'Sea surface salinity forecasts from <a href="http://noaa.gov" alt="National Oceanic and Atmospheric Administration">NOAA</a>'
+                            }
+                        },
+                        sst: {
+                            wmsParams: {
+                                layers: 'sst',
+                                cmap: 'SeaTempArctic_C_BGYR_14colors'
+                            },
+                            options: {
+                                attribution: 'Sea surface temperature forecasts from <a href="http://noaa.gov" alt="National Oceanic and Atmospheric Administration">NOAA</a>'
+                            }
+                        },
+                    },
+                    EAST_AFRICA: {
+                        dataset: 'NOAA/HYCOM/NOAA_HYCOM_EAST_AFRICA.nc',
+                        currentSpeed: {
+                            wmsParams: {
+                                layers: 'u_velocity_v_velocity',
+                                cmap: 'CurrentArctic_kn_WGYR_11colors'
+                            },
+                            options: {
+                                attribution: 'Current forecasts from <a href="http://noaa.gov" alt="National Oceanic and Atmospheric Administration">NOAA</a>'
+                            }
+                        },
+                        currentDirection: {
+                            wmsParams: {
+                                layers: 'u_velocity:v_velocity',
+                                styles: 'vector_method=black_vector,vector_color=0.1',
+                                cmap: 'CurrentArctic_kn_WGYR_11colors'
+                            },
+                            legendParams: {
+                                longName: 'Current speed',
+                                show: false
+                            },
+                            options: {
+                                zIndex: 900,
+                                primadonna: false,
+                                attribution: 'Current forecasts from <a href="http://noaa.gov" alt="National Oceanic and Atmospheric Administration">NOAA</a>'
+                            }
+                        },
+                        sss: {
+                            wmsParams: {
+                                layers: 'sss',
+                                cmap: 'PrSalArctic_psu_GB_14colors'
+                            },
+                            options: {
+                                attribution: 'Sea surface salinity forecasts from <a href="http://noaa.gov" alt="National Oceanic and Atmospheric Administration">NOAA</a>'
+                            }
+                        },
+                        sst: {
+                            wmsParams: {
+                                layers: 'sst',
+                                cmap: 'SeaTempWarm_C_BGYR_14colors'
+                            },
+                            options: {
+                                attribution: 'Sea surface temperature forecasts from <a href="http://noaa.gov" alt="National Oceanic and Atmospheric Administration">NOAA</a>'
+                            }
+                        },
+                    },
+                    MEDITERRANEAN: {
+                        dataset: 'NOAA/HYCOM/NOAA_HYCOM_MEDSEA.nc',
+                        currentSpeed: {
+                            wmsParams: {
+                                layers: 'u_velocity_v_velocity',
+                                cmap: 'CurrentArctic_kn_WGYR_11colors'
+                            },
+                            options: {
+                                attribution: 'Current forecasts from <a href="http://noaa.gov" alt="National Oceanic and Atmospheric Administration">NOAA</a>'
+                            }
+                        },
+                        currentDirection: {
+                            wmsParams: {
+                                layers: 'u_velocity:v_velocity',
+                                styles: 'vector_method=black_vector,vector_color=0.1',
+                                cmap: 'CurrentArctic_kn_WGYR_11colors'
+                            },
+                            legendParams: {
+                                longName: 'Current speed',
+                                show: false
+                            },
+                            options: {
+                                zIndex: 900,
+                                primadonna: false,
+                                attribution: 'Current forecasts from <a href="http://noaa.gov" alt="National Oceanic and Atmospheric Administration">NOAA</a>'
+                            }
+                        },
+                        sss: {
+                            wmsParams: {
+                                layers: 'sss',
+                                cmap: 'PrSalArctic_psu_GB_14colors'
+                            },
+                            options: {
+                                attribution: 'Sea surface salinity forecasts from <a href="http://noaa.gov" alt="National Oceanic and Atmospheric Administration">NOAA</a>'
+                            }
+                        },
+                        sst: {
+                            wmsParams: {
+                                layers: 'sst',
+                                cmap: 'SeaTemp_C_BGYR_14colors'
+                            },
+                            options: {
+                                attribution: 'Sea surface temperature forecasts from <a href="http://noaa.gov" alt="National Oceanic and Atmospheric Administration">NOAA</a>'
+                            }
+                        },
+                    },
+                }
             }
-            if (this.options.foreground !== null) {
-                this.options.foreground.addTo(map);
-            }
-            L.TileLayer.WMS.prototype.onAdd.call(this, map);
-        },
-
-        onRemove: function(map) {
-            if (this._legendControl !== null) {
-                this._legendControl.removeLegend(this._legendId);
-                this._legendControl = null;
-                this._legendId = null;
-            }
-            if (this.options.foreground !== null) {
-                this.options.foreground.removeFrom(map);
-            }
-            L.TileLayer.WMS.prototype.onRemove.call(this, map);
-            this._map = null;
-        },
-
-        _getLegendControl: function() {
-            if (typeof this._map._fcoo_legendcontrol == 'undefined' || !this._map._fcoo_legendcontrol) {
-                this._map._fcoo_legendcontrol = new L.Control.Legend(
-                        this._map, {position: this.legendParams.position,
-                                    language: this.options.language});
-                this._map.addControl(this._map._fcoo_legendcontrol);
-            }
-            return this._map._fcoo_legendcontrol;
         }
     });
-
 })();
