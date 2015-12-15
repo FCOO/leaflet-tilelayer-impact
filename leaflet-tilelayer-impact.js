@@ -7,7 +7,7 @@
  * A JavaScript library for using Danish Defence Center for Operational Oceanography's (FCOO)
  * Web Map Service layers without hassle.
  */
-L.TileLayer.WMS.Impact = L.TileLayer.WMS.Fcoo.extend({
+L.TileLayer.WMS.Impact = L.TileLayer.WMS.Pydap.extend({
     //baseUrl: "http://webmap-dev01.fcoo.dk:8080/{dataset}.wms",
     baseUrl: location.protocol + "//{s}.fcoo.dk/webmap/impact/{dataset}.wms",
 
