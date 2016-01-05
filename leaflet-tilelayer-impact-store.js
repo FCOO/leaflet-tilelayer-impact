@@ -20,6 +20,50 @@
         },
 
         model: {
+            TEST: {
+                options: {
+                    zIndex: 100
+                },
+                wmsParams: {
+                    cmap: 'Green_Red_3colors'
+                },
+                legendParams: {
+                    attribution: '<a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a> / HIRLAM / S03'
+                },
+                HIRLAM: {
+                    K05: {
+                        dataset: 'impact/TEST/DMI_HIRLAM_K05_AIRTEST.nc',
+                        UAV: {
+                            legendParams: {
+                                parameters: {
+                                    windspeed: {
+                                        longname: 'Flight level wind speed',
+                                        units: 'm/s',
+                                        sliderOptions: {
+                                            range: true,
+                                            step: 1.0,
+                                            min: 10,
+                                            max: 40,
+                                            values: [ 20, 30 ],
+                                        }
+                                    },
+                                    windspeed10: {
+                                        longname: 'Surface wind speed',
+                                        units: 'm/s',
+                                        sliderOptions: {
+                                            range: true,
+                                            step: 0.5,
+                                            min: 0,
+                                            max: 15,
+                                            values: [ 7.5, 10 ],
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
             DMI: {
                 options: {
                     zIndex: 100

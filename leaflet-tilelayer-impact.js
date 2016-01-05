@@ -11,25 +11,71 @@ L.TileLayer.WMS.Impact = L.TileLayer.WMS.Pydap.extend({
     //baseUrl: "http://webmap-dev01.fcoo.dk:8080/{dataset}.wms",
     baseUrl: location.protocol + "//{s}.fcoo.dk/webmap/impact/{dataset}.wms",
 
-    onAdd: function(map) {
-        var that = this;
-        L.TileLayer.WMS.prototype.onAdd.call(this, map);
-        this._map = map;
+        onAdd: function(map) {
+            var that = this;
+            this._map = map;
 
-        // Subscribe to datetime updates
-        map.on('datetimechange', function(evt) {
-            that.setParams({time: evt.datetime}, false, true);
-        });
+            // Subscribe to datetime updates
+            map.on('datetimechange', this.setParamsListener, this);
 
-        // Create or get LegendControl if it already exists
-        this._legendControl = this._getLegendControl();
-        // Add this layer legend to the LegendControl
-        this._legendId = this._legendControl.addLegend(this, this.legendParams);
-        // Add foreground layer if specified
-        if (this.options.foreground !== null) {
-            this.options.foreground.addTo(map);
-        }
-    },
+            if (that.options.foreground !== null) {
+                that.options.foreground.addTo(map);
+            }
+
+            var gotMetadata = function () {
+                if (that._gotMetadata) {
+                    L.TileLayer.WMS.prototype.onAdd.call(that, map);
+                    // Add legend when required info available
+                    if (that.legendParams.show) {
+                        that._legendControl = that._getLegendControl();
+                        if (that._legendControl !== null) {
+                            var legendId = that._legendId;
+                            if (that.legendParams.show) {
+                                that.legendParams.imageUrl = that._fcootileurl + that.getLegendUrl();
+                            }
+                            if (that.legendParams.show && that.legendParams.imageUrl !== null) {
+                                if (that.legendParams.longName === undefined) {
+                                    that.legendParams.longName = that._long_name;
+                                }
+                                if (that.legendParams.units === undefined) {
+                                    that.legendParams.units = that._units;
+                                }
+                                var legendOptions = {
+                                    'imageUrl': that.legendParams.imageUrl,
+                                    'attribution': that.legendParams.attribution,
+                                    'lastUpdated': that._last_modified,
+                                    'epoch': that._epoch,
+                                    'updatesPerDay': that.legendParams.updatesPerDay,
+                                    'longName': that.legendParams.longName,
+                                    'units': that.legendParams.units
+                                };
+                                that._legendId = that._legendControl.addLegend(
+                                                that, that.legendParams);
+                            }
+                        }
+                    }
+
+                    // Subscribe to levelchange events for layers with level attribute
+                    if (that.levels !== undefined) {
+                        map.on('levelchange', function(evt) {
+                            that.setParams({level: evt.index}, false, false);
+                        });
+                    }
+
+                    // Check if time information is available and set current time
+                    // to first time step if this is the case. Add layer to map
+                    // after that
+                    if (that.wmsParams.time == undefined) {
+                        var strtime = moment(that.timesteps[0]);
+                        strtime = strtime.format('YYYY-MM-DDTHH:mm:ss.SSS') + 'Z';
+                        that.wmsParams.time = strtime;
+                    }
+                } else {
+                    setTimeout(gotMetadata, 10);
+                }
+            }
+            gotMetadata();
+        },
 
     /*
      * Make an impact layer control instead of the default legend control.
