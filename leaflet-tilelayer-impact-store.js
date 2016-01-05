@@ -31,8 +31,8 @@
                     attribution: '<a href="http://dmi.dk" alt="Danish Meteorological Institute">DMI</a> / HIRLAM / S03'
                 },
                 HIRLAM: {
-                    K05: {
-                        dataset: 'impact/TEST/DMI_HIRLAM_K05_AIRTEST.nc',
+                    S03: {
+                        dataset: 'impact/TEST/DMI_HIRLAM_S03_AIRTEST.nc',
                         UAV: {
                             legendParams: {
                                 parameters: {
